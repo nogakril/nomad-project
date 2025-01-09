@@ -1,2 +1,1 @@
-# nomad-project
-Bezalel Course "Nomads and Technology in Extreme Conditions" - Final Project
+# "Nomads and Technology in Extreme Conditions" - Final Project
