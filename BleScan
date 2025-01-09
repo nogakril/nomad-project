@@ -1,0 +1,84 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+
+int scanTime = 3; //In seconds
+
+BLEScan* pBLEScan;
+
+String targetName = "Noga"; // Change when another device is used
+
+String targetAddress = "XX:XX:XX:XX:XX:XX"; 
+
+const int ledPin = 2;
+
+// RSSI thresholds (configurable)
+int rssiThresholdFar = -80;
+int rssiThresholdNear = -70;
+int rssiThresholdClose = -60;
+int rssiThresholdVeryClose = -50;
+
+String getDistanceStatus(int rssi) {
+  if (rssi >= rssiThresholdVeryClose) {
+    return "VERY_CLOSE";
+  } else if (rssi >= rssiThresholdClose) {
+    return "CLOSE";
+  } else if (rssi >= rssiThresholdNear) {
+    return "NEAR";
+  } else if (rssi >= rssiThresholdFar) {
+    return "FAR";
+  } else {
+    return "OUT_OF_RANGE";
+  }
+}
+
+void blinkLedTwice() {
+  for (int i = 0; i < 2; i++) {
+    digitalWrite(ledPin, HIGH); // Turn the LED on
+    delay(100);                 // Wait 100ms
+    digitalWrite(ledPin, LOW);  // Turn the LED off
+    delay(100);                 // Wait 100ms
+  }
+}
+
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      //Serial.printf("Advertised Device: %s \n", advertisedDevice.toString().c_str());
+      if (advertisedDevice.getName() == targetName || advertisedDevice.getAddress().toString() == targetAddress) {
+        Serial.println("Target device found!");
+        Serial.print("RSSI: ");
+        int rssi = advertisedDevice.getRSSI();
+        Serial.println(rssi);
+        // blinkLedTwice();
+        String status = getDistanceStatus(rssi);
+        Serial.print("Distance status: ");
+        Serial.println(status);
+      }
+    }
+};
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Scanning...");
+  pinMode(ledPin, OUTPUT);  // Set the LED pin as an output
+
+  BLEDevice::init("");
+  pBLEScan = BLEDevice::getScan(); //create new scan
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);  // less or equal setInterval value
+
+  
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  BLEScanResults* foundDevices = pBLEScan->start(scanTime, false);
+  // Serial.print("Devices found: ");
+  // Serial.println(foundDevices->getCount());
+  // Serial.println("Scan done!");
+  pBLEScan->clearResults();   // delete results fromBLEScan buffer to release memory
+  delay(1000); // delay time between scans
+}
