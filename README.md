@@ -16,3 +16,9 @@
 5. In the code: Edit the "name" variable to match the name you defined.
 
 ![image](https://github.com/user-attachments/assets/4768498a-11f1-40b6-9bc1-385d6fbd5006)
+
+### How to write code for the led ring:
+1. Install library: Tools -> Manage Libraries -> Adafruit NeoPixel
+2. Connect the data pin to D15 (or other pin, make sure to change in the code)
+![image](https://github.com/user-attachments/assets/bef5a7af-349c-4343-9399-6208b06d412c)
+
