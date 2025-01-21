@@ -1,0 +1,32 @@
+#include <Adafruit_NeoPixel.h>
+
+// Configuration
+#define LED_PIN 15       // Data pin connected to D15
+#define NUM_LEDS 12      // Number of LEDs in the ring
+
+// Create NeoPixel object
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setup() {
+  strip.begin();          // Initialize the LED strip
+  strip.show();           // Turn off all LEDs at the start
+  strip.setBrightness(50); // Adjust brightness (0-255)
+}
+
+void loop() {
+  flickerInCircle(50);    // Call the flicker function with a delay
+}
+
+// Function to flicker LEDs in a circular pattern
+void flickerInCircle(int delayTime) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    // Turn on the current LED
+    strip.setPixelColor(i, strip.Color(255, 0, 0)); // Red color
+    strip.show();
+    delay(delayTime);
+
+    // Turn off the current LED
+    strip.setPixelColor(i, 0); // Off
+    strip.show();
+  }
+}
