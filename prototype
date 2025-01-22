@@ -1,0 +1,101 @@
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
+#include <Adafruit_NeoPixel.h>
+
+// BLE Configuration
+int scanTime = 3; // In seconds
+BLEScan* pBLEScan;
+String targetName = "Noga"; // Target device name
+String targetAddress = "XX:XX:XX:XX:XX:XX"; // Target device address
+
+// RSSI thresholds (configurable)
+int rssiThresholdFar = -80;
+int rssiThresholdNear = -70;
+int rssiThresholdClose = -60;
+int rssiThresholdVeryClose = -50;
+
+// LED Configuration
+#define LED_PIN 15      // Data pin connected to D15
+#define NUM_LEDS 12     // Number of LEDs in the ring
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// Function to determine distance status based on RSSI
+String getDistanceStatus(int rssi) {
+  if (rssi >= rssiThresholdVeryClose) {
+    return "VERY_CLOSE";
+  } else if (rssi >= rssiThresholdClose) {
+    return "CLOSE";
+  } else if (rssi >= rssiThresholdNear) {
+    return "NEAR";
+  } else if (rssi >= rssiThresholdFar) {
+    return "FAR";
+  } else {
+    return "OUT_OF_RANGE";
+  }
+}
+
+// Function to flash LEDs in a circle with a specific color and delay
+void flickerInCircle(int delayTime, uint32_t color) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, color); // Set the color
+    strip.show();
+    delay(delayTime);
+
+    strip.setPixelColor(i, 0); // Turn off the LED
+    strip.show();
+  }
+}
+
+// BLE Device Callbacks
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+    void onResult(BLEAdvertisedDevice advertisedDevice) {
+      if (advertisedDevice.getName() == targetName || advertisedDevice.getAddress().toString() == targetAddress) {
+        Serial.println("Target device found!");
+        int rssi = advertisedDevice.getRSSI();
+        Serial.print("RSSI: ");
+        Serial.println(rssi);
+
+        // Determine distance status and flash LEDs accordingly
+        String status = getDistanceStatus(rssi);
+        Serial.print("Distance status: ");
+        Serial.println(status);
+
+        if (status == "VERY_CLOSE") {
+          flickerInCircle(50, strip.Color(255, 0, 0)); // Red, fast
+        } else if (status == "CLOSE") {
+          flickerInCircle(100, strip.Color(255, 165, 0)); // Orange, medium
+        } else if (status == "NEAR") {
+          flickerInCircle(200, strip.Color(255, 255, 0)); // Yellow, slow
+        } else if (status == "FAR") {
+          flickerInCircle(400, strip.Color(0, 255, 0)); // Green, very slow
+        }
+      }
+    }
+};
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Initializing...");
+  
+  // BLE Initialization
+  BLEDevice::init("");
+  pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+  pBLEScan->setActiveScan(true);
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);
+
+  // LED Initialization
+  strip.begin();
+  strip.show(); // Turn off all LEDs
+  strip.setBrightness(50); // Set brightness
+}
+
+void loop() {
+  // Start BLE scan
+  pBLEScan->start(scanTime, false);
+  pBLEScan->clearResults(); // Clear results to free memory
+  delay(1000); // Delay between scans
+}
