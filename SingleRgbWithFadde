@@ -1,0 +1,44 @@
+#include <Arduino.h>
+
+// Define RGB LED GPIO Pins
+#define PIN_RED    23 // GPIO23
+#define PIN_GREEN  22 // GPIO22
+#define PIN_BLUE   21 // GPIO21
+
+// Define PWM Frequency & Resolution
+#define PWM_FREQ    1000  // 1 kHz
+#define PWM_RES     8      // 8-bit resolution (0-255)
+
+// Define LEDC Channels (New API does not require manual assignment)
+void setup() {
+  // Attach LEDC channels to the RGB LED pins
+  ledcAttach(PIN_RED,   PWM_FREQ, PWM_RES);
+  ledcAttach(PIN_GREEN, PWM_FREQ, PWM_RES);
+  ledcAttach(PIN_BLUE,  PWM_FREQ, PWM_RES);
+}
+
+void loop() {
+  // Fade Red
+  fadeColor(PIN_RED);
+  
+  // Fade Green
+  fadeColor(PIN_GREEN);
+
+  // Fade Blue
+  fadeColor(PIN_BLUE);
+}
+
+// Function to fade in and out a specific color
+void fadeColor(int pin) {
+  // Fade in
+  for (int dutyCycle = 0; dutyCycle <= 255; dutyCycle++) {
+    ledcWrite(pin, dutyCycle);
+    delay(10);
+  }
+
+  // Fade out
+  for (int dutyCycle = 255; dutyCycle >= 0; dutyCycle--) {
+    ledcWrite(pin, dutyCycle);
+    delay(10);
+  }
+}
