@@ -1,0 +1,37 @@
+const int vibrationPin = 13;
+
+void setup() {
+  // Set the vibration pin as output
+  pinMode(vibrationPin, OUTPUT);
+  // Ensure the motor is off at the start
+  digitalWrite(vibrationPin, LOW);
+  Serial.begin(9600);
+}
+
+void loop() {
+  // Number of pulses
+  int pulseCount = 3;
+  // Duration of each pulse in milliseconds
+  int pulseDuration = 100;
+  // Gap between pulses in milliseconds
+  int pulseGap = 1000;
+  // Delay between vibration cycles in milliseconds
+  int cycleDelay = 10000;
+
+  // Vibrate in pulses
+  for (int i = 0; i < pulseCount; i++) {
+    digitalWrite(vibrationPin, HIGH); // Turn the motor on
+        Serial.println("Motor ON");
+
+    delay(pulseDuration);            // Wait for the pulse duration
+    digitalWrite(vibrationPin, LOW); // Turn the motor off
+        Serial.println("Motor off");
+
+    if (i < pulseCount - 1) {        // Avoid gap after the last pulse
+      delay(pulseGap);               // Wait for the gap duration
+    }
+  }
+
+  // Wait for the next cycle
+  delay(cycleDelay);
+}
