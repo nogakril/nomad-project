@@ -1,0 +1,38 @@
+#include <Adafruit_NeoPixel.h>
+
+// Configuration
+#define LED_PIN 15       // Data pin connected to D15
+#define NUM_LEDS 12      // Number of LEDs in the ring
+#define TARGET_LED 0     // Change this to control a different LED in the ring
+
+// Create NeoPixel object
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setup() {
+  strip.begin();          
+  strip.show();           // Turn off all LEDs at the start
+  strip.setBrightness(255); // Max brightness
+}
+
+void loop() {
+  breatheEffect(TARGET_LED, 255, 0, 0, 10);  // Breathing effect in Red, speed 10
+}
+
+// Function to create a breathing effect on a single LED
+void breatheEffect(int ledIndex, int r, int g, int b, int speed) {
+  for (int brightness = 0; brightness <= 255; brightness += 5) { // Fade in
+    strip.setPixelColor(ledIndex, strip.Color((r * brightness) / 255, 
+                                              (g * brightness) / 255, 
+                                              (b * brightness) / 255));
+    strip.show();
+    delay(speed);
+  }
+  
+  for (int brightness = 255; brightness >= 0; brightness -= 5) { // Fade out
+    strip.setPixelColor(ledIndex, strip.Color((r * brightness) / 255, 
+                                              (g * brightness) / 255, 
+                                              (b * brightness) / 255));
+    strip.show();
+    delay(speed);
+  }
+}
