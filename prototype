@@ -5,7 +5,7 @@
 #include <Adafruit_NeoPixel.h>
 
 // BLE Configuration
-int scanTime = 3; // In seconds
+int scanTime = 3; // BLE scan duration in seconds
 BLEScan* pBLEScan;
 String targetName = "Noga"; // Target device name
 String targetAddress = "XX:XX:XX:XX:XX:XX"; // Target device address
@@ -15,11 +15,23 @@ int rssiThresholdFar = -80;
 int rssiThresholdNear = -70;
 int rssiThresholdClose = -60;
 int rssiThresholdVeryClose = -50;
+int lastRSSI = -100;  // Store last detected RSSI value
+bool firstDetection = true; // Tracks first-time detection
 
 // LED Configuration
 #define LED_PIN 15      // Data pin connected to D15
 #define NUM_LEDS 12     // Number of LEDs in the ring
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+#define TARGET_LED 0    // LED index to control
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// Vibration Motor Configuration
+#define VIBRATION_PIN 13  // GPIO pin for vibration motor
+bool vibrationTriggered = false;
+
+// LED Breathing Effect Timing
+unsigned long lastUpdateTime = 0;
+int brightness = 0;
+bool increasing = true;
 
 // Function to determine distance status based on RSSI
 String getDistanceStatus(int rssi) {
@@ -36,49 +48,100 @@ String getDistanceStatus(int rssi) {
   }
 }
 
-// Function to flash LEDs in a circle with a specific color and delay
-void flickerInCircle(int delayTime, uint32_t color) {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    strip.setPixelColor(i, color); // Set the color
-    strip.show();
-    delay(delayTime);
+// Function to determine LED color based on RSSI
+uint32_t getColorFromRSSI(int rssi) {
+  float ratio = 0.0;
 
-    strip.setPixelColor(i, 0); // Turn off the LED
+  if (rssi >= rssiThresholdVeryClose) {
+    ratio = 1.0;  // Full red
+  } else if (rssi >= rssiThresholdClose) {
+    ratio = 0.75;
+  } else if (rssi >= rssiThresholdNear) {
+    ratio = 0.5;
+  } else if (rssi >= rssiThresholdFar) {
+    ratio = 0.25;
+  } else {
+    ratio = 0.0;  // Full blue
+  }
+
+  int red = (int)(ratio * 255);         // Red increases as we get closer
+  int blue = (int)((1.0 - ratio) * 255); // Blue decreases as we get closer
+  return strip.Color(red, 0, blue);
+}
+
+// Function to update breathing effect
+void updateBreathingEffect() {
+  unsigned long currentMillis = millis();
+  
+  if (currentMillis - lastUpdateTime > 20) {  // Update every 20ms
+    lastUpdateTime = currentMillis;
+
+    if (increasing) {
+      brightness += 5;
+      if (brightness >= 255) increasing = false;
+    } else {
+      brightness -= 5;
+      if (brightness <= 0) increasing = true;
+    }
+
+    // Set LED color based on last RSSI
+    strip.setPixelColor(TARGET_LED, strip.Color(
+      (brightness * ((lastRSSI >= rssiThresholdFar) ? 255 : 0)) / 255,  // Red
+      0,  // No Green
+      (brightness * ((lastRSSI < rssiThresholdFar) ? 255 : 0)) / 255  // Blue
+    ));
+
     strip.show();
   }
 }
 
+// Function to trigger vibration
+void triggerVibration() {
+  int pulseCount = 1;     // Number of pulses (1 for single pulse)
+  int pulseDuration = 100; // Duration of each pulse in milliseconds
+  int pulseGap = 1000;    // Gap between pulses (not needed for single pulse)
+
+  for (int i = 0; i < pulseCount; i++) {
+    digitalWrite(VIBRATION_PIN, HIGH); // Turn the motor on
+    Serial.println("Vibration Motor ON");
+    delay(pulseDuration);               // Wait for pulse duration
+    digitalWrite(VIBRATION_PIN, LOW);  // Turn the motor off
+    Serial.println("Vibration Motor OFF");
+
+    if (i < pulseCount - 1) {
+      delay(pulseGap); // Wait for the gap duration (only needed for multiple pulses)
+    }
+  }
+}
+
 // BLE Device Callbacks
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-    void onResult(BLEAdvertisedDevice advertisedDevice) {
-      if (advertisedDevice.getName() == targetName || advertisedDevice.getAddress().toString() == targetAddress) {
-        Serial.println("Target device found!");
-        int rssi = advertisedDevice.getRSSI();
-        Serial.print("RSSI: ");
-        Serial.println(rssi);
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice advertisedDevice) {
+    if (advertisedDevice.getName() == targetName || advertisedDevice.getAddress().toString() == targetAddress) {
+      int rssi = advertisedDevice.getRSSI();
+      Serial.print("RSSI: ");
+      Serial.println(rssi);
 
-        // Determine distance status and flash LEDs accordingly
-        String status = getDistanceStatus(rssi);
-        Serial.print("Distance status: ");
-        Serial.println(status);
+      String status = getDistanceStatus(rssi);
+      Serial.print("Distance status: ");
+      Serial.println(status);
 
-        if (status == "VERY_CLOSE") {
-          flickerInCircle(50, strip.Color(255, 0, 0)); // Red, fast
-        } else if (status == "CLOSE") {
-          flickerInCircle(100, strip.Color(255, 165, 0)); // Orange, medium
-        } else if (status == "NEAR") {
-          flickerInCircle(200, strip.Color(255, 255, 0)); // Yellow, slow
-        } else if (status == "FAR") {
-          flickerInCircle(400, strip.Color(0, 255, 0)); // Green, very slow
-        }
+      // Store last RSSI
+      lastRSSI = rssi;
+
+      // Trigger vibration only on first detection and when the device is "FAR"
+      if (firstDetection || status == "FAR") {
+        triggerVibration();
+        firstDetection = false; // Prevents repeated vibration
       }
     }
+  }
 };
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Initializing...");
-  
+
   // BLE Initialization
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
@@ -91,11 +154,17 @@ void setup() {
   strip.begin();
   strip.show(); // Turn off all LEDs
   strip.setBrightness(50); // Set brightness
+
+  // Vibration Motor Initialization
+  pinMode(VIBRATION_PIN, OUTPUT);
+  digitalWrite(VIBRATION_PIN, LOW); // Ensure motor is off initially
 }
 
 void loop() {
-  // Start BLE scan
-  pBLEScan->start(scanTime, false);
+  // Start BLE scan (non-blocking)
+  BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
   pBLEScan->clearResults(); // Clear results to free memory
-  delay(1000); // Delay between scans
+  
+  // Run breathing effect while scanning
+  updateBreathingEffect();
 }
