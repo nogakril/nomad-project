@@ -2,7 +2,7 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include <Adafruit_NeoPixel.h>
+#include <Arduino.h>
 
 // BLE Configuration
 int scanTime = 3; // BLE scan duration in seconds
@@ -13,16 +13,19 @@ String targetAddress = "XX:XX:XX:XX:XX:XX"; // Target device address
 // RSSI thresholds (configurable)
 int rssiThresholdFar = -80;
 int rssiThresholdNear = -70;
-int rssiThresholdClose = -60;
-int rssiThresholdVeryClose = -50;
+int rssiThresholdClose = -55;
+int rssiThresholdVeryClose = -40;
 int lastRSSI = -100;  // Store last detected RSSI value
 bool firstDetection = true; // Tracks first-time detection
 
-// LED Configuration
-#define LED_PIN 15      // Data pin connected to D15
-#define NUM_LEDS 12     // Number of LEDs in the ring
-#define TARGET_LED 0    // LED index to control
-Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+// Define RGB LED GPIO Pins
+#define PIN_RED    23
+#define PIN_GREEN  22
+#define PIN_BLUE   21
+
+// Define PWM Frequency & Resolution
+#define PWM_FREQ    1000  // 1 kHz
+#define PWM_RES     8      // 8-bit resolution (0-255)
 
 // Vibration Motor Configuration
 #define VIBRATION_PIN 13  // GPIO pin for vibration motor
@@ -49,27 +52,6 @@ String getDistanceStatus(int rssi) {
 }
 
 // Function to determine LED color based on RSSI
-uint32_t getColorFromRSSI(int rssi) {
-  float ratio = 0.0;
-
-  if (rssi >= rssiThresholdVeryClose) {
-    ratio = 1.0;  // Full red
-  } else if (rssi >= rssiThresholdClose) {
-    ratio = 0.75;
-  } else if (rssi >= rssiThresholdNear) {
-    ratio = 0.5;
-  } else if (rssi >= rssiThresholdFar) {
-    ratio = 0.25;
-  } else {
-    ratio = 0.0;  // Full blue
-  }
-
-  int red = (int)(ratio * 255);         // Red increases as we get closer
-  int blue = (int)((1.0 - ratio) * 255); // Blue decreases as we get closer
-  return strip.Color(red, 0, blue);
-}
-
-// Function to update breathing effect
 void updateBreathingEffect() {
   unsigned long currentMillis = millis();
   
@@ -84,33 +66,26 @@ void updateBreathingEffect() {
       if (brightness <= 0) increasing = true;
     }
 
-    // Set LED color based on last RSSI
-    strip.setPixelColor(TARGET_LED, strip.Color(
-      (brightness * ((lastRSSI >= rssiThresholdFar) ? 255 : 0)) / 255,  // Red
-      0,  // No Green
-      (brightness * ((lastRSSI < rssiThresholdFar) ? 255 : 0)) / 255  // Blue
-    ));
-
-    strip.show();
-  }
-}
-
-// Function to trigger vibration
-void triggerVibration() {
-  int pulseCount = 1;     // Number of pulses (1 for single pulse)
-  int pulseDuration = 100; // Duration of each pulse in milliseconds
-  int pulseGap = 1000;    // Gap between pulses (not needed for single pulse)
-
-  for (int i = 0; i < pulseCount; i++) {
-    digitalWrite(VIBRATION_PIN, HIGH); // Turn the motor on
-    Serial.println("Vibration Motor ON");
-    delay(pulseDuration);               // Wait for pulse duration
-    digitalWrite(VIBRATION_PIN, LOW);  // Turn the motor off
-    Serial.println("Vibration Motor OFF");
-
-    if (i < pulseCount - 1) {
-      delay(pulseGap); // Wait for the gap duration (only needed for multiple pulses)
+    // Color transition based on RSSI
+    float ratio = 0.0;
+    if (lastRSSI >= rssiThresholdVeryClose) {
+      ratio = 1.0;  // Full red
+    } else if (lastRSSI >= rssiThresholdClose) {
+      ratio = 0.75;
+    } else if (lastRSSI >= rssiThresholdNear) {
+      ratio = 0.5;
+    } else if (lastRSSI >= rssiThresholdFar) {
+      ratio = 0.25;
+    } else {
+      ratio = 0.0;  // Full blue
     }
+
+    int red = (int)(ratio * brightness);         // Red increases as we get closer
+    int blue = (int)((1.0 - ratio) * brightness); // Blue decreases as we get closer
+
+    ledcWrite(PIN_RED, red);
+    ledcWrite(PIN_GREEN, 0); // No green component
+    ledcWrite(PIN_BLUE, blue);
   }
 }
 
@@ -138,6 +113,25 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   }
 };
 
+// Function to trigger vibration
+void triggerVibration() {
+  int pulseCount = 1;     // Number of pulses (1 for single pulse)
+  int pulseDuration = 100; // Duration of each pulse in milliseconds
+  int pulseGap = 1000;    // Gap between pulses (not needed for single pulse)
+
+  for (int i = 0; i < pulseCount; i++) {
+    digitalWrite(VIBRATION_PIN, HIGH); // Turn the motor on
+    Serial.println("Vibration Motor ON");
+    delay(pulseDuration);               // Wait for pulse duration
+    digitalWrite(VIBRATION_PIN, LOW);  // Turn the motor off
+    Serial.println("Vibration Motor OFF");
+
+    if (i < pulseCount - 1) {
+      delay(pulseGap); // Wait for the gap duration (only needed for multiple pulses)
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("Initializing...");
@@ -150,10 +144,10 @@ void setup() {
   pBLEScan->setInterval(100);
   pBLEScan->setWindow(99);
 
-  // LED Initialization
-  strip.begin();
-  strip.show(); // Turn off all LEDs
-  strip.setBrightness(50); // Set brightness
+  // Attach LEDC channels to RGB LED pins
+  ledcAttach(PIN_RED, PWM_FREQ, PWM_RES);
+  ledcAttach(PIN_GREEN, PWM_FREQ, PWM_RES);
+  ledcAttach(PIN_BLUE, PWM_FREQ, PWM_RES);
 
   // Vibration Motor Initialization
   pinMode(VIBRATION_PIN, OUTPUT);
@@ -162,7 +156,7 @@ void setup() {
 
 void loop() {
   // Start BLE scan (non-blocking)
-  BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
+  pBLEScan->start(scanTime, false);
   pBLEScan->clearResults(); // Clear results to free memory
   
   // Run breathing effect while scanning
